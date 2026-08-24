@@ -338,7 +338,10 @@ The output is prose, so correctness is not assertable. What is verifiable:
    within two rounds; a clean rotation round escalates the next round to the
    full lens set. Pure control flow, no model.
 2. **Resume** — kill mid-run, relaunch with `resumeFromRunId`; the cached prefix
-   should replay instantly.
+   should replay instantly. *Deferred:* this is a property of the Workflow
+   runtime rather than of this code, and exercising it means deliberately
+   killing a paid run. Check it opportunistically the first time a real run
+   fails, not as a scheduled task.
 3. **One real run each** — research on a question whose answer is already known,
    so quality is judgeable; product definition on a small real idea.
 
