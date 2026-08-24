@@ -117,40 +117,67 @@ if (Array.isArray(cfg.preflight) && cfg.preflight.length) {
 
 let usePane = cfg.generator.pane === true
 
-async function generate(critiques, round) {
-  const body = (critiques && critiques.length)
-    ? [
-        'Revise your draft to address these critiques.',
-        'For each one, either fix it or state plainly why you reject it.',
-        'Return the complete revised document, not a diff.',
-        '',
-        JSON.stringify(critiques, null, 2),
-      ].join('\n')
-    : [
-        cfg.generator.task,
-        '',
-        'INPUT:',
-        cfg.input,
-        preflightContext ? '\nPREFLIGHT CONTEXT:\n' + preflightContext : '',
-      ].join('\n')
+function buildBody(critiques, current, forPane) {
+  if (critiques && critiques.length) {
+    const head = [
+      'Revise the draft to address these critiques.',
+      'For each one, either fix it or state plainly why you reject it.',
+      'Return the complete revised document, not a diff.',
+      '',
+    ]
+    if (forPane) {
+      // The pane agent is long-lived and already holds the draft, the request,
+      // and the preflight context in its own conversation. Re-sending them
+      // would waste the entire point of keeping the pane alive across rounds.
+      return head.concat([JSON.stringify(critiques, null, 2)]).join('\n')
+    }
+    // A background agent is a fresh subagent every round and remembers nothing,
+    // so the draft it is asked to revise must travel with the request.
+    return head.concat([
+      'ORIGINAL REQUEST:',
+      cfg.input,
+      preflightContext ? '\nPREFLIGHT CONTEXT:\n' + preflightContext : '',
+      '',
+      'CURRENT DRAFT:',
+      current,
+      '',
+      'CRITIQUES:',
+      JSON.stringify(critiques, null, 2),
+    ]).join('\n')
+  }
+  return [
+    cfg.generator.task,
+    '',
+    'INPUT:',
+    cfg.input,
+    preflightContext ? '\nPREFLIGHT CONTEXT:\n' + preflightContext : '',
+  ].join('\n')
+}
 
+async function generate(critiques, round, current) {
   if (usePane) {
-    const out = await agent(paneDriverPrompt(round, cfg.generator.role + '\n\n' + body), {
-      label: 'generate:pane:r' + round,
-      phase: 'Generate',
-      model: 'sonnet',
-      effort: 'low',
-      agentType: 'general-purpose',
-    })
+    const out = await agent(
+      paneDriverPrompt(round, cfg.generator.role + '\n\n' + buildBody(critiques, current, true)),
+      {
+        label: 'generate:pane:r' + round,
+        phase: 'Generate',
+        model: 'sonnet',
+        effort: 'low',
+        agentType: 'general-purpose',
+      }
+    )
     if (out && out.trim() === 'PANE_UNAVAILABLE') {
       log('herdr pane unavailable — falling back to a background generator')
       usePane = false
     } else if (out) {
       return out
+    } else {
+      log('pane generator returned nothing on round ' + round + ' — falling back to a background generator')
+      usePane = false
     }
   }
 
-  return await agent(cfg.generator.role + '\n\n' + body, {
+  return await agent(cfg.generator.role + '\n\n' + buildBody(critiques, current, false), {
     label: 'generate:r' + round,
     phase: 'Generate',
     model: cfg.generator.model,
@@ -159,18 +186,22 @@ async function generate(critiques, round) {
 }
 
 phase('Generate')
-let draft = await generate(null, 0)
+let draft = await generate(null, 0, null)
 if (!draft) throw new Error('gan-engine: the generator produced nothing on round 0')
 
 const seen = new Set()
 const history = []
 let state = { dry: 0, round: 0, full: false }
 
-while (shouldContinue(state, termination, budget.total ? budget.remaining() : null)) {
+while (shouldContinue(
+  state,
+  termination,
+  budget && typeof budget.remaining === 'function' ? budget.remaining() : null
+)) {
   const active = lensesFor(cfg.lenses, termination.lensesPerRound, state.round, state.full)
 
   phase('Attack')
-  const results = (await parallel(active.map(l => () =>
+  const raw = (await parallel(active.map(l => () =>
     agent(attackPrompt(l, draft), {
       label: 'critic:' + l.name,
       phase: 'Attack',
@@ -180,9 +211,20 @@ while (shouldContinue(state, termination, budget.total ? budget.remaining() : nu
       schema: CRITIQUE,
     })))).filter(Boolean)
 
+  // A truthy result is not necessarily a usable one. Only a well-formed
+  // {issues: [...]} counts as a critic that actually reviewed the draft —
+  // otherwise a malformed reply becomes a silent vote for convergence.
+  const results = raw.filter(r => r && Array.isArray(r.issues))
+
+  if (raw.length > results.length) {
+    log('round ' + state.round + ': ' + (raw.length - results.length)
+        + ' critic(s) returned a malformed result (no issues array)')
+  }
+
   if (!results.length) {
     throw new Error(
-      'gan-engine: all ' + active.length + ' critics failed in round ' + state.round
+      'gan-engine: all ' + active.length + ' critics failed or returned malformed'
+      + ' results in round ' + state.round
       + ' — aborting rather than counting a false dry round'
     )
   }
@@ -203,7 +245,7 @@ while (shouldContinue(state, termination, budget.total ? budget.remaining() : nu
   if (fresh.length) {
     for (const i of fresh) seen.add(i.id)
     phase('Generate')
-    const revised = await generate(fresh, state.round + 1)
+    const revised = await generate(fresh, state.round + 1, draft)
     if (!revised) throw new Error('gan-engine: the generator died on round ' + (state.round + 1))
     draft = revised
   }
