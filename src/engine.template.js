@@ -121,8 +121,12 @@ function buildBody(critiques, current, forPane) {
   if (critiques && critiques.length) {
     const head = [
       'Revise the draft to address these critiques.',
-      'For each one, either fix it or state plainly why you reject it.',
-      'Return the complete revised document, not a diff.',
+      'Return ONLY the complete revised document, exactly as it should stand.',
+      'No preamble, no commentary, no list of what you changed, and no argument',
+      'about critiques you disagree with — a critique you reject is simply one',
+      'you leave the draft unchanged for. Anything you write that is not part of',
+      'the document itself becomes part of the document, and the next round of',
+      'critics will review it as such.',
       '',
     ]
     if (forPane) {
