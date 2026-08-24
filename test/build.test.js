@@ -28,8 +28,12 @@ test("build output inlines every core function", () => {
 
 test("build output contains no forbidden non-determinism", () => {
   const src = readFileSync(OUT, "utf8")
-  expect(src).not.toMatch(/Math\.random\s*\(/)
-  expect(src).not.toMatch(/Date\.now\s*\(/)
+  // Strip full-line // comments: the constraint forbids CALLS, and core.js's
+  // header comment legitimately names the very APIs it avoids. Trailing
+  // comments after code are left alone, so a real call is still caught.
+  const code = src.replace(/^\s*\/\/.*$/gm, "")
+  expect(code).not.toMatch(/Math\.random\s*\(/)
+  expect(code).not.toMatch(/Date\.now\s*\(/)
 })
 
 test("build output parses as JavaScript", () => {
