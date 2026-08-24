@@ -1,0 +1,9 @@
+{
+  "name": "gan-engine",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "build": "bun run build.js"
+  }
+}
