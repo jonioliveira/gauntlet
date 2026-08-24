@@ -129,7 +129,10 @@ agent, N cheap stateless ones.
       model: "sonnet", effort: "low", agentType: "general-purpose" }
   ],
 
-  termination: { dryRounds: 2, maxRounds: 5, budgetFloor: 50000 },
+  termination: {
+    dryRounds: 2, maxRounds: 5, budgetFloor: 50000,
+    lensesPerRound: 3            // rotate; omit or set >= lenses.length to run all
+  },
   checkpoint:  "before-final" | "none",
   output:      { path: "docs/spec/research/auth-rework.md" }   // repo-relative
 }
@@ -142,18 +145,43 @@ once, which also lets a crashed run resume onto the same pane.
 `preflight` is generic, not domain machinery: research uses it for a multi-modal
 evidence sweep, product definition for a repo scan.
 
+### Lens rotation
+
+Running all five lenses every round is the dominant cost. Most rounds do not
+need all five, so the engine rotates a subset — but a clean *rotation* round is
+weaker evidence than a clean *full* round, because two lenses never saw the
+draft. Escalation resolves this: a clean rotation round promotes the next round
+to the full set.
+
+Rotation is index arithmetic, never random — workflow scripts cannot call
+`Math.random()`:
+
+```js
+const K = cfg.termination.lensesPerRound ?? cfg.lenses.length
+const lensesFor = (round, full) =>
+  (full || K >= cfg.lenses.length)
+    ? cfg.lenses
+    : Array.from({length: K},
+        (_, i) => cfg.lenses[(round * K + i) % cfg.lenses.length])
+```
+
+With 5 lenses and `K = 3`: round 0 → `[0,1,2]`, round 1 → `[3,4,0]`,
+round 2 → `[1,2,3]`. Every lens is seen at least once every two rounds.
+
 ### Loop
 
 ```js
 let draft = await generate(cfg, null)        // round 0, fed preflight results
 const seen = new Set()
-let dry = 0, round = 0
+let dry = 0, round = 0, full = false
 
 while (dry < cfg.termination.dryRounds
        && round < cfg.termination.maxRounds
        && (!budget.total || budget.remaining() > cfg.termination.budgetFloor)) {
 
-  const results = (await parallel(cfg.lenses.map(l => () =>
+  const active = lensesFor(round, full)
+
+  const results = (await parallel(active.map(l => () =>
       agent(attackPrompt(l, draft), {
         label: `critic:${l.name}`, phase: 'Attack',
         model: l.model, effort: l.effort,
@@ -164,14 +192,25 @@ while (dry < cfg.termination.dryRounds
   if (!results.length) throw new Error('all critics failed — aborting')
 
   const fresh = results.flatMap(r => r.issues).filter(i => !seen.has(i.id))
-  if (!fresh.length) { dry++; round++; continue }
+
+  if (!fresh.length) {          // clean round
+    dry++
+    full = true                 // escalate: next round runs every lens
+    round++
+    continue
+  }
 
   dry = 0
+  full = false
   fresh.forEach(i => seen.add(i.id))
   draft = await generate(cfg, fresh)
   round++
 }
 ```
+
+Convergence therefore requires a clean rotation round **followed by** a clean
+full pass. A full pass that finds something resets `dry` to 0 and resumes
+rotating.
 
 Dedup is against `seen`, never against issues the generator accepted. The
 generator may legitimately reject a critique; without marking it seen, that
@@ -265,31 +304,29 @@ while (dry < 2 && round < 5
 Every early exit calls `log()`. A truncated run must say it was truncated, or
 "converged" is a lie.
 
-### Expected scale — exceeds the default guideline
+### Expected scale
 
-Worst case, per run:
+With `lensesPerRound: 3` over 5 lenses:
 
 | Stage | `agent()` calls |
 |---|---|
 | preflight | 3–4 |
-| per round: 5 critics + 1 generate | 6 |
-| × `maxRounds: 5` | 30 |
-| **total** | **~34** |
+| productive round (3 critics + 1 generate) | 4 |
+| clean rotation round (3 critics, nothing to revise) | 3 |
+| escalated full pass (5 critics) | 5 |
 
-A typical run converging in 2 productive rounds plus 2 dry rounds is ~28.
+**Typical** — 2 productive rounds, then converge:
+`4 + 4 + 4 + 3 + 5` = **~20 agents**
 
-This is roughly **double** the session's default "medium" workflow guideline of
-15 agents. That guideline is explicitly not a hard limit, but the overage is
-structural, not incidental: it is `lenses × rounds`, and both numbers are load
-bearing. Three ways down, if wanted:
+**Worst case** — `maxRounds: 5`, all productive, no convergence:
+`4 + 5×4` = **~24 agents**
 
-1. **Rotate lenses** — run 3 of 5 per round on a fixed rotation. Cuts critic
-   calls ~40%; each lens sees the draft less often.
-2. **`maxRounds: 3`** — caps at ~22. Risks returning `converged: false` more.
-3. **Raise the guideline** via `/config` → Dynamic workflow size.
-
-Cost is not the constraint — critics are cheap and the generator is one
-persistent pane agent regardless. The constraint is agent count.
+Down from ~34 without rotation. Still above the session's default "medium"
+guideline of 15, which is explicitly a guideline rather than a hard limit — but
+the gap is now small enough to accept rather than engineer around. Concurrency
+is capped at ~10 simultaneous agents regardless, so the residual cost is
+wall-clock and orchestration risk, not money: critics are cheap and the
+generator is a single persistent pane agent no matter how many rounds run.
 
 ## Testing
 
@@ -297,7 +334,9 @@ The output is prose, so correctness is not assertable. What is verifiable:
 
 1. **Engine determinism** — run with a stub config whose critics return fixed
    issue lists. Assert: terminates on 2 dry rounds; dedups by `id`; honours
-   `maxRounds`; aborts when all critics fail. Pure control flow, no model.
+   `maxRounds`; aborts when all critics fail; `lensesFor()` cycles every lens
+   within two rounds; a clean rotation round escalates the next round to the
+   full lens set. Pure control flow, no model.
 2. **Resume** — kill mid-run, relaunch with `resumeFromRunId`; the cached prefix
    should replay instantly.
 3. **One real run each** — research on a question whose answer is already known,
@@ -307,6 +346,7 @@ The output is prose, so correctness is not assertable. What is verifiable:
 
 None blocking. Deferred until after first use:
 
-- Whether `maxRounds: 5` and `dryRounds: 2` are the right constants.
+- Whether `maxRounds: 5`, `dryRounds: 2`, and `lensesPerRound: 3` are the right
+  constants.
 - Whether the research generator should also run unattended overnight.
 - Whether a third domain justifies extracting anything further.
