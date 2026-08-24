@@ -1,7 +1,7 @@
 // Pure loop logic for the GAN engine.
 //
 // Every function here must be safe to inline verbatim into a Claude Code
-// Workflow script: no imports, no I/O, no Date.now(), no Math.random().
+// Workflow script: no imports, no I/O, no non-deterministic operations.
 // `build.js` strips the `export` keywords and pastes this file in whole.
 
 export function lensesFor(lenses, perRound, round, full) {
