@@ -428,6 +428,13 @@ git commit -m "build: inline core into a self-contained workflow script"
 
 The `meta` block and `// @@CORE@@` marker stay exactly as they are; everything below the marker is new.
 
+> **Superseded — do not copy this block.** This is the as-planned version. Review found
+> four defects in it: F1 (Critical — the revision body carried no draft, so background
+> revisions rewrote a document they had never seen), F2 (a falsy pane reply fell through
+> silently), F3 (a malformed critic result was credited as a dry round), and F4 (a zero
+> budget disabled the budget stop). A later review added more. The authoritative
+> implementation is `src/engine.template.js`; read that, not this.
+
 ```js
 export const meta = {
   name: 'gan-engine',

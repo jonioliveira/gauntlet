@@ -31,8 +31,14 @@ The loop ends only when a full panel pass finds nothing new.
    `docs/spec/<YYYY-MM-DD>-<slug>.md`, both relative to the repo they are in.
    If the current directory is not a git repo, ask where output should land.
 
-5. **Call the Workflow tool** with
-   `scriptPath: "~/workspace/gan-engine/dist/gan-engine.js"` and an `args`
+5. **Resolve the engine path.** Run `echo $HOME` with Bash and use
+   `<that value>/.claude/workflows/gan-engine.js` as the `scriptPath`.
+   `scriptPath` is a JSON string, not a shell word — nothing expands `~`, so it
+   must be a fully-expanded absolute path. If that file does not exist, the user
+   has not run `./install.sh` yet; tell them so and stop, rather than falling
+   back to a path inside the repo.
+
+6. **Call the Workflow tool** with that `scriptPath` and an `args`
    object built from the config, in exactly this shape:
 
    `{slug, input, preflight: [...], generator: {...}, lenses: [...],
@@ -40,11 +46,11 @@ The loop ends only when a full panel pass finds nothing new.
 
    Pass `args` as a real JSON object, never a JSON-encoded string.
 
-6. **When it returns**, report `converged`, `rounds`, and the count of
+7. **When it returns**, report `converged`, `rounds`, and the count of
    `issuesRaised`. If `converged` is false, say so plainly — the draft is
    unfinished, not merely long.
 
-7. **Write the draft** to the agreed output path.
+8. **Write the draft** to the agreed output path.
    - `research`: write it, then summarise the findings.
    - `define`: do **not** write it yet. Show the user the draft and the issues
      that were raised, and ask for approval first. This checkpoint exists

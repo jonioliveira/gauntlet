@@ -18,12 +18,28 @@ if (!cfg.generator || !Array.isArray(cfg.lenses) || cfg.lenses.length === 0) {
   throw new Error('gan-engine: args must include a generator and at least one lens')
 }
 
-const termination = {
+const DEFAULT_TERMINATION = {
   dryRounds: 2,
   maxRounds: 5,
   budgetFloor: 50000,
   lensesPerRound: 3,
-  ...(cfg.termination || {}),
+}
+
+// Only finite numbers are accepted. `args` crosses a JSON boundary, so a missing
+// value arrives as null, and `0 >= null` is true — an unvalidated null would
+// report convergence on a draft no critic ever saw.
+const termination = {}
+for (const key of Object.keys(DEFAULT_TERMINATION)) {
+  const value = cfg.termination ? cfg.termination[key] : undefined
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    termination[key] = value
+  } else {
+    termination[key] = DEFAULT_TERMINATION[key]
+    if (value !== undefined && value !== null) {
+      log('termination.' + key + ' was not a finite number — using default '
+          + DEFAULT_TERMINATION[key])
+    }
+  }
 }
 
 const CRITIQUE = {
@@ -70,29 +86,38 @@ function attackPrompt(lens, draft) {
 
 function paneDriverPrompt(round, body) {
   const name = 'gan-' + cfg.slug
+  const outFile = '/tmp/gan-' + cfg.slug + '-r' + round + '.md'
   return [
     'You are driving a Herdr pane that hosts a long-lived generator agent.',
     'Use Bash. Run `herdr --skill` first if you do not already know the verbs.',
     '',
     'AGENT NAME: ' + name,
     'ROUND: ' + round,
+    'OUTPUT FILE: ' + outFile,
     '',
     round === 0
-      ? '1. Run `herdr agent get ' + name + '`. If no such agent exists, create a '
-        + 'pane and start a `claude` agent in it named exactly "' + name + '".'
-      : '1. The agent "' + name + '" already exists from an earlier round. '
-        + 'Do NOT create it again — its context is the point.',
+      ? '1. Run `herdr agent get ' + name + '`. If no such agent exists, create a pane and '
+        + 'start a `claude` agent in it named exactly "' + name + '", passing the model '
+        + 'through: herdr agent start ' + name + ' --kind claude -- --model '
+        + (cfg.generator.model || 'opus')
+      : '1. The agent "' + name + '" already exists from an earlier round. Do NOT create it '
+        + 'again — its context is the point.',
     '2. Send the PROMPT below to that agent and wait for it to finish:',
     '   herdr agent prompt ' + name + ' "<prompt>" --wait --timeout 900000',
-    '3. Read the full reply: herdr agent read ' + name + ' --lines 2000',
-    '4. Return ONLY the generator\'s document, verbatim. No commentary of your own.',
+    '3. Read the document from the FILE with Bash: cat ' + outFile,
+    '   Do NOT recover the document from the pane\'s scrollback. Scrollback truncates',
+    '   silently and wraps lines; the file is the transport.',
+    '4. Return the full contents of that file, verbatim, and nothing else.',
     '',
-    'If Herdr is unavailable, or the agent cannot be started or prompted,',
-    'reply with exactly PANE_UNAVAILABLE and nothing else.',
+    'If Herdr is unavailable, the agent cannot be started or prompted, or ' + outFile,
+    'does not exist or is empty, reply with exactly PANE_UNAVAILABLE and nothing else.',
     '',
     'PROMPT:',
     '---',
     body,
+    '',
+    '(Write your complete answer to ' + outFile + ' — create or overwrite it.',
+    ' Then reply in the pane with only the word DONE.)',
     '---',
   ].join('\n')
 }
@@ -170,7 +195,10 @@ async function generate(critiques, round, current) {
         agentType: 'general-purpose',
       }
     )
-    if (out && out.trim() === 'PANE_UNAVAILABLE') {
+    const trimmed = (out || '').trim()
+    // Length-bounded so a real document that happens to quote the token cannot
+    // false-positive, but a chatty failure message still degrades gracefully.
+    if (trimmed.length < 200 && trimmed.includes('PANE_UNAVAILABLE')) {
       log('herdr pane unavailable — falling back to a background generator')
       usePane = false
     } else if (out) {
@@ -194,6 +222,8 @@ let draft = await generate(null, 0, null)
 if (!draft) throw new Error('gan-engine: the generator produced nothing on round 0')
 
 const seen = new Set()
+const raised = new Map()      // id -> full issue object, everything ever raised
+const unresolved = new Map()  // id -> full issue object, re-raised after being seen
 const history = []
 let state = { dry: 0, round: 0, full: false }
 
@@ -236,6 +266,16 @@ while (shouldContinue(
     log('round ' + state.round + ': ' + (active.length - results.length) + ' critic(s) failed')
   }
 
+  // A critic raising an id that is already in `seen` means the generator was shown
+  // this critique and did not satisfy it. That is the unresolved signal.
+  for (const result of results) {
+    for (const issue of result.issues) {
+      if (!issue || typeof issue.id !== 'string' || !issue.id) continue
+      if (!raised.has(issue.id)) raised.set(issue.id, issue)
+      if (seen.has(issue.id)) unresolved.set(issue.id, issue)
+    }
+  }
+
   const fresh = freshIssues(results, seen)
   history.push({
     round: state.round,
@@ -268,7 +308,8 @@ return {
   converged: converged,
   rounds: state.round,
   draft: draft,
-  issuesRaised: Array.from(seen),
+  issuesRaised: Array.from(raised.values()),
+  unresolved: Array.from(unresolved.values()),
   history: history,
   outputPath: (cfg.output && cfg.output.path) || null,
 }
