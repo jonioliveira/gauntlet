@@ -10,11 +10,13 @@ decisions the code cannot.
 - `2026-08-25-final-rereview.md` — verification of the fix wave. 7 of 8 addressed; I6
   (`bun test` vs a stale `dist/`) parked, see below.
 
-## Known open item
+## Resolved: I6 (stale `dist/`)
 
 `package.json` has `"pretest": "bun run build"`, but Bun's `bun test` subcommand does not
-run package.json lifecycle hooks — only `bun run test` does. Verified: with `dist/`
-removed, `bun test` fails 6 tests while `bun run test` rebuilds and passes.
+run package.json lifecycle hooks — only `bun run test` does. So `pretest` alone left a
+bare `bun test` passing green against a previously built artifact.
 
-**Use `bun run test`, not `bun test`.** A bare `bun test` after editing `src/` will pass
-against the previously built artifact.
+Closed by a freshness assertion in `test/build.test.js`: if any of `src/core.js`,
+`src/engine.template.js` or `build.js` is newer than `dist/gan-engine.js`, the suite fails
+with `build output is not stale — run \`bun run build\``. Both invocations are now honest —
+`bun run test` rebuilds and passes, bare `bun test` fails loudly rather than lying.

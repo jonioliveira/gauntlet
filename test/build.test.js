@@ -1,10 +1,21 @@
 import { test, expect } from "bun:test"
-import { readFileSync, existsSync } from "node:fs"
+import { readFileSync, existsSync, statSync } from "node:fs"
 
 const OUT = "dist/gan-engine.js"
+const SOURCES = ["src/core.js", "src/engine.template.js", "build.js"]
 
 test("build output exists", () => {
   expect(existsSync(OUT)).toBe(true)
+})
+
+test("build output is not stale — run `bun run build`", () => {
+  // `package.json`'s pretest hook only fires under `bun run test`; Bun's `bun test`
+  // subcommand ignores lifecycle scripts. Without this check a bare `bun test` after
+  // editing src/ passes green against the PREVIOUS artifact.
+  const builtAt = statSync(OUT).mtimeMs
+  for (const source of SOURCES) {
+    expect(statSync(source).mtimeMs).toBeLessThanOrEqual(builtAt)
+  }
 })
 
 test("build output is self-contained — meta is the only export", () => {
