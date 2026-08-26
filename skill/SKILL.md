@@ -50,6 +50,16 @@ The loop ends only when a full panel pass finds nothing new.
    `issuesRaised`. If `converged` is false, say so plainly — the draft is
    unfinished, not merely long.
 
+   **Always report `unresolved`, even when `converged` is true.** It holds the
+   critiques a critic raised again after the generator had already been shown
+   them — direct evidence the generator refused a critique rather than fixed
+   it. `converged` means the loop stopped finding anything *new*, not that
+   every objection was answered, so a run can converge with a blocking issue
+   outstanding. If `unresolved` is non-empty, list each entry's `claim` and say
+   which ones the generator declined to address; if it is empty, say so — that
+   is the difference between a draft that survived criticism and one that
+   merely outlasted it.
+
 8. **Write the draft** to the agreed output path.
    - `research`: write it, then summarise the findings.
    - `define`: do **not** write it yet. Show the user the draft and the issues
