@@ -237,13 +237,26 @@ normal outcome, not an error.**
 
 ## Open questions
 
-**1. Builders' human gates (blocking — resolve first).**
-`run-sdlc` has two human approval gates: after planning, and before the PR opens.
-Unattended, either the runner configures them off or every task stalls at gate one
-waiting for a human who is not watching. Whether builders supports disabling them
-is unknown and must be established before implementation proceeds; the answer may
-change this design. It is a decision about how much unreviewed code reaches draft
-PRs, and it belongs to the user, not to whichever behaviour is easier to code.
+**1. Builders' human gates — RESOLVED 2026-08-27. Not blocking.**
+`run-sdlc` resolves both gates from one knob, `AGENTS.md → Plan gate` →
+`gate-policy`, validated at preflight (missing = `auto`):
+
+- `always` → gate regardless; on a headless run the stop is "the designed
+  outcome, not a failure" and the record reads `blocked-on-human`.
+- `never` → never gate; an explicit request becomes a recorded no-op.
+- `auto` (default) → gate **iff the invocation carries an explicit request**.
+  "No signal means unattended: run straight through."
+
+The same policy governs the hand-off gate. The runner therefore needs **no
+configuration**: it issues no gate request, so under the default `auto` both
+gates pass through. Builders was built for unattended operation — "attendance is
+declared by the launcher — never inferred from a TTY, a CI variable, or a hunch
+that someone is watching."
+
+Consequence worth keeping: setting `gate-policy: always` in a target repo's
+`AGENTS.md` makes every task in that repo stop for review, without touching the
+runner. Blast radius is a property of the repo being changed, which is the right
+place for it.
 
 **2. Relation direction (verify, do not assume).**
 `relation add <A> --related <B> --type blocked-by` is read as "A is blocked by B".
