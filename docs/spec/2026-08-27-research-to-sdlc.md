@@ -171,12 +171,15 @@ docs/spec/epics/<slug>/published.json
 bin/run-epic.sh <EPIC-ID> [--max-parallel 3] [--dry-run]
 
 until no task changes state:
-  runnable = children of <EPIC-ID> where
+  edges  = published.json .relations          ← the graph
+  state  = orca linear list-issues --parent-id <EPIC-ID> --json
+             → .result.issues[] | {identifier, state.name}
+  runnable = tasks where
              state ∉ {done, canceled, in-progress}
-             and every blocked-by issue IS done
+             and every blocking task IS done
   for each runnable task, while running < max-parallel:
       orca linear save-issue <TASK-ID> --state <in-progress-state>   ← claim it FIRST
-      orca worktree create  feat/<TASK-ID>
+      orca worktree create --name <TASK-ID> --linear-issue <TASK-ID>
       herdr agent start     gan-<TASK-ID>   (in that worktree)
       herdr agent prompt    "/run-sdlc <TASK-ID>" --wait
       on success: orca linear attach --current --url <pr>
@@ -193,21 +196,43 @@ it, is what stops the loop relaunching a task already running. Without it, the
 predicate "not done and unblocked" is true of a task mid-flight, and the next
 iteration starts a second worktree, pane and pipeline for the same ticket.
 
-This also means Linear holds the runner's entire state. Two consequences worth
+This also means Linear holds the runner's entire *state* (the graph lives in the manifest — see below). Two consequences worth
 having deliberately: the board shows what is running, and a runner that dies can
 be restarted without double-launching anything — but a task left in `in-progress`
 by a killed runner will not be retried until someone moves it back. That is the
 right trade (a stuck task is visible; a duplicated pipeline is not), and it is why
 failure moves the task **out** of `in-progress` rather than leaving it there.
 
-```
-```
+### Where the graph lives — CORRECTED 2026-08-27
+
+The design as first written had the runner read the dependency graph back from
+Linear. **It cannot.** `orca linear` exposes `relation add` and `relation remove`
+and no read verb, and neither `list-issues` nor `issue` returns a `relations` key.
+Relations are write-only through this CLI. Verified before implementation.
+
+The split that works, and is arguably better:
+
+| | Source | Why |
+|---|---|---|
+| **Graph** (edges) | `published.json` manifest | Static after publish — cannot drift |
+| **State** (per task) | `orca linear list-issues --parent-id <EPIC> --json` → `.result.issues[].state.name` | Dynamic — Linear is authoritative |
+
+Relations are still written to Linear: a human reading the board sees the blocking
+structure, which is most of their value. The runner simply does not read them back.
+
+This preserves the property that matters — a task is runnable when every task
+blocking it is done — so the failure policy below still falls out of the semantics
+rather than from skip logic. Only the source of the edge list changes.
+
+**Consequence: the manifest's `relations` array is load-bearing, not bookkeeping.**
+It is the only machine-readable copy of the graph.
 
 ### Failure policy — Linear enforces it
 
 A failed task is **never moved to done**. Because runnable means "every blocking
 issue is done", its dependents never become runnable, while independent branches
-continue. The skip-the-subtree behaviour is the DAG semantics already in Linear;
+continue. The skip-the-subtree behaviour falls out of the DAG semantics (edges from the
+manifest, states from Linear);
 the runner needs no code for it, no "failed" state of its own, and no
 reconciliation path when its view and Linear's disagree.
 
@@ -258,7 +283,10 @@ Consequence worth keeping: setting `gate-policy: always` in a target repo's
 runner. Blast radius is a property of the repo being changed, which is the right
 place for it.
 
-**2. Relation direction (verify, do not assume).**
+**2. Relation direction (verify, do not assume).** Note this is now a check on what
+humans see on the board, not on execution order — the runner takes its edges from the
+manifest.
+
 `relation add <A> --related <B> --type blocked-by` is read as "A is blocked by B".
 That is the natural reading, but reversing it inverts the entire execution order.
 The first publish verifies one edge in the Linear UI before the runner trusts it.
