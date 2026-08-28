@@ -1,6 +1,6 @@
 ---
 name: gan
-description: Run an adversarial generate-and-attack pipeline that hardens work against a rotating panel of critics. Use when the user types /gan research <question> or /gan define <idea>, or asks to research something rigorously, stress-test a draft, or turn a rough product idea into a spec that has survived criticism.
+description: Run an adversarial generate-and-attack pipeline that hardens work against a rotating panel of critics. Use when the user types /gan research <question>, /gan define <idea>, or /gan decompose <research-doc>, or asks to research something rigorously, stress-test a draft, turn a rough product idea into a spec that has survived criticism, or break research findings into a Linear epic and tasks.
 ---
 
 # GAN — adversarial research and product definition
@@ -29,7 +29,8 @@ The loop ends only when a full panel pass finds nothing new.
 
 4. **Confirm the output path with the user** before running. Research goes to
    `docs/spec/research/<slug>.md`, product definition to
-   `docs/spec/<YYYY-MM-DD>-<slug>.md`, both relative to the repo they are in.
+   `docs/spec/<YYYY-MM-DD>-<slug>.md`, decompose to
+   `docs/spec/epics/<slug>/breakdown.md`, all relative to the repo they are in.
    If the current directory is not a git repo, ask where output should land.
 
 5. **Resolve the engine path.** Run `echo $HOME` with Bash and use
