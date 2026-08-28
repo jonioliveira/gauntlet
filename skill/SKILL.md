@@ -12,19 +12,20 @@ The loop ends only when a full panel pass finds nothing new.
 
 - `/gan research <question>` — evidence-backed findings, runs unattended
 - `/gan define <idea>` — a hardened spec, stops for the user's approval
+- `/gan decompose <research-doc>` — a Linear epic and its tasks, stops for your approval
 
 ## What to do
 
-1. **Parse the subcommand.** `research` or `define`. If neither is given, ask
-   which one — do not guess.
+1. **Parse the subcommand.** `research`, `define`, or `decompose`. If none is given, ask which one — do not
+   guess.
 
 2. **Compute a slug.** Kebab-case, 2–4 words, derived from the input
    (e.g. "should we adopt tRPC" -> `adopt-trpc`). It names the herdr pane and
    must stay stable across resumes, so write it down and reuse it.
 
-3. **Read the matching config** — `configs/research.md` or `configs/product.md`
-   from this skill's directory. It holds the generator framing, the lenses, and
-   the preflight agents as prose.
+3. **Read the matching config** — `configs/research.md`, `configs/product.md`, or
+   `configs/decompose.md` from this skill's directory. It holds the generator
+   framing, the lenses, and the preflight agents as prose.
 
 4. **Confirm the output path with the user** before running. Research goes to
    `docs/spec/research/<slug>.md`, product definition to
@@ -65,6 +66,9 @@ The loop ends only when a full panel pass finds nothing new.
    - `define`: do **not** write it yet. Show the user the draft and the issues
      that were raised, and ask for approval first. This checkpoint exists
      because no critic can judge whether it is the right product to build.
+   - `decompose`: do **not** publish yet. Show the user the breakdown and the issues
+     that were raised, and ask for approval. On approval, run
+     `bin/publish-epic.sh <breakdown-path>` — never call `orca linear` by hand.
 
 ## Notes
 
