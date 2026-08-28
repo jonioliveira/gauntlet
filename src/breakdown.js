@@ -70,3 +70,59 @@ export function parseBreakdown(markdown) {
     tasks: taskSplit.slice(1).map(parseTask),
   }
 }
+
+// Kahn's algorithm: repeatedly remove tasks whose dependencies are all
+// satisfied. Anything left over is in a cycle. Also yields the topological
+// order publish uses to create issues parents-first.
+export function validateBreakdown(breakdown) {
+  const errors = []
+  const tasks = breakdown.tasks || []
+
+  if (tasks.length === 0) errors.push("breakdown has no tasks")
+
+  const titles = new Set()
+  for (const t of tasks) {
+    if (titles.has(t.title)) errors.push(`duplicate task title: "${t.title}"`)
+    titles.add(t.title)
+    if (t.title.includes(",")) {
+      errors.push(
+        `task title contains a comma, which would break dependency references: "${t.title}"`
+      )
+    }
+    if (!t.acceptanceCriteria || t.acceptanceCriteria.length === 0) {
+      errors.push(`task "${t.title}" has no acceptance criteria`)
+    }
+  }
+
+  for (const t of tasks) {
+    for (const dep of t.dependsOn) {
+      if (!titles.has(dep)) {
+        errors.push(`task "${t.title}" depends on "${dep}", which is not in this breakdown`)
+      }
+    }
+  }
+
+  if (errors.length) return { ok: false, errors, order: [] }
+
+  const remaining = new Map(tasks.map(t => [t.title, new Set(t.dependsOn)]))
+  const order = []
+  let progress = true
+  while (remaining.size && progress) {
+    progress = false
+    for (const [title, deps] of [...remaining]) {
+      if (deps.size === 0) {
+        order.push(title)
+        remaining.delete(title)
+        for (const [, otherDeps] of remaining) otherDeps.delete(title)
+        progress = true
+      }
+    }
+  }
+
+  if (remaining.size) {
+    errors.push(`dependency cycle among: ${[...remaining.keys()].join(", ")}`)
+    return { ok: false, errors, order: [] }
+  }
+
+  return { ok: true, errors: [], order }
+}

@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test"
-import { parseBreakdown } from "../src/breakdown.js"
+import { parseBreakdown, validateBreakdown } from "../src/breakdown.js"
 
 const SAMPLE = `# EPIC: Add partner contacts
 
@@ -126,4 +126,64 @@ s
 - c
 `
   expect(parseBreakdown(md).tasks[0].estimate).toBe(null)
+})
+
+const bd = (...tasks) => ({ epic: { title: "E", summary: "s" }, tasks })
+const task = (title, dependsOn = []) => ({
+  title, estimate: 1, dependsOn, description: "d", acceptanceCriteria: ["a"],
+})
+
+test("a valid breakdown passes and yields a topological order", () => {
+  const r = validateBreakdown(bd(task("b", ["a"]), task("a")))
+  expect(r.ok).toBe(true)
+  expect(r.errors).toEqual([])
+  expect(r.order.indexOf("a")).toBeLessThan(r.order.indexOf("b"))
+})
+
+test("a dangling dependency is rejected and named", () => {
+  const r = validateBreakdown(bd(task("a", ["ghost"])))
+  expect(r.ok).toBe(false)
+  expect(r.errors.join(" ")).toContain("ghost")
+  expect(r.order).toEqual([])
+})
+
+test("a two-node cycle is rejected", () => {
+  const r = validateBreakdown(bd(task("a", ["b"]), task("b", ["a"])))
+  expect(r.ok).toBe(false)
+  expect(r.errors.join(" ").toLowerCase()).toContain("cycle")
+})
+
+test("a three-node cycle is rejected", () => {
+  const r = validateBreakdown(bd(task("a", ["c"]), task("b", ["a"]), task("c", ["b"])))
+  expect(r.ok).toBe(false)
+  expect(r.errors.join(" ").toLowerCase()).toContain("cycle")
+})
+
+test("a self-dependency is rejected", () => {
+  const r = validateBreakdown(bd(task("a", ["a"])))
+  expect(r.ok).toBe(false)
+})
+
+test("duplicate task titles are rejected", () => {
+  const r = validateBreakdown(bd(task("a"), task("a")))
+  expect(r.ok).toBe(false)
+  expect(r.errors.join(" ").toLowerCase()).toContain("duplicate")
+})
+
+test("a breakdown with no tasks is rejected", () => {
+  const r = validateBreakdown(bd())
+  expect(r.ok).toBe(false)
+})
+
+test("a task with no acceptance criteria is rejected", () => {
+  const bare = { title: "a", estimate: 1, dependsOn: [], description: "d", acceptanceCriteria: [] }
+  const r = validateBreakdown(bd(bare))
+  expect(r.ok).toBe(false)
+  expect(r.errors.join(" ").toLowerCase()).toContain("acceptance")
+})
+
+test("a comma in a task title is rejected — it would break dependency references", () => {
+  const r = validateBreakdown(bd(task("Add contact_name, contact_phone columns")))
+  expect(r.ok).toBe(false)
+  expect(r.errors.join(" ").toLowerCase()).toContain("comma")
 })
