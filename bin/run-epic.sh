@@ -67,6 +67,13 @@ fetch_state() {
     > "$STATE_FILE"
 }
 
+# Best-effort: a failure notice on the board, because nobody is watching the
+# runner's terminal during an unattended fan-out. Must never fail a task that
+# has already failed.
+note_failure() {
+  orca linear comment add "$1" --body "$2" --json >/dev/null 2>&1 || true
+}
+
 # One task's whole lifecycle, run in the background. It must never abort the
 # parent: a failure here releases the claim and returns non-zero, so the run
 # continues and the task becomes runnable again once someone fixes it.
@@ -76,6 +83,7 @@ run_task() {
   if ! WT="$(orca worktree create --name "$TASK" --linear-issue "$TASK" \
                --base-branch main --json | jq -r '.result.path // .path')" || [ -z "$WT" ]; then
     echo "worktree create failed for $TASK — releasing claim" >&2
+    note_failure "$TASK" "Runner could not create a worktree for this task. Claim released; it will be retried."
     orca linear save-issue "$TASK" --state "${TODO_STATES%%,*}" --json >/dev/null 2>&1 || true
     return 1
   fi
@@ -88,7 +96,17 @@ run_task() {
     if [ -n "$PR" ]; then
       orca linear attach "$TASK" --url "$PR" --title "PR/MR link" --json >/dev/null 2>&1 || true
     fi
-    orca linear save-issue "$TASK" --state "${DONE_STATES%%,*}" --json >/dev/null
+    if ! orca linear save-issue "$TASK" --state "${DONE_STATES%%,*}" --json >/dev/null; then
+      # The pipeline already succeeded and a PR may exist — releasing the claim
+      # here would make the task runnable again and re-run completed work,
+      # which is worse than leaving it stuck In Progress for a human to close out.
+      echo "$TASK: pipeline SUCCEEDED but marking it done failed." >&2
+      echo "  The work is complete${PR:+ ($PR)} — do NOT re-run it." >&2
+      echo "  Finish by hand: orca linear save-issue $TASK --state \"${DONE_STATES%%,*}\"" >&2
+      echo "  Worktree kept at $WT" >&2
+      note_failure "$TASK" "Pipeline succeeded but the runner could not mark this issue done. The work is complete${PR:+ ($PR)} — do not re-run it; move it to done manually."
+      return 1
+    fi
     orca worktree rm --worktree "$TASK" --json >/dev/null 2>&1 || true
     echo "done: $TASK${PR:+ ($PR)}"
     return 0
@@ -96,6 +114,7 @@ run_task() {
 
   # Keep the worktree for inspection. Release the claim so the task can be retried.
   echo "pipeline failed for $TASK — worktree kept at $WT, claim released" >&2
+  note_failure "$TASK" "Pipeline failed. Worktree kept at $WT for inspection. Claim released; it will be retried."
   orca linear save-issue "$TASK" --state "${TODO_STATES%%,*}" --json >/dev/null 2>&1 || true
   return 1
 }
@@ -123,7 +142,11 @@ while :; do
     echo "herdr agent prompt gan-$TASK \"/run-sdlc $TASK\" --wait"
 
     if [ "$DRY" -eq 0 ]; then
-      orca linear save-issue "$TASK" --state "${INPROGRESS_STATES%%,*}" --json >/dev/null
+      if ! orca linear save-issue "$TASK" --state "${INPROGRESS_STATES%%,*}" --json >/dev/null; then
+        echo "$TASK: could not claim (state change failed) — skipping this pass" >&2
+        failed=$((failed + 1))
+        continue
+      fi
       run_task "$TASK" &
       PIDS="$PIDS $!"
     fi
