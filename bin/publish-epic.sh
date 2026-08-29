@@ -42,8 +42,12 @@ echo "$PLAN" | jq -r '.epic.summary' > "$EPIC_BODY"
 
 echo "orca linear save-issue --team $TEAM --title \"EPIC: $EPIC_TITLE\" --body-file $EPIC_BODY --json"
 if [ "$DRY" -eq 0 ]; then
-  EPIC_ID="$(orca linear save-issue --team "$TEAM" --title "EPIC: $EPIC_TITLE" \
-              --body-file "$EPIC_BODY" --json | jq -r '.identifier')"
+  EPIC_SAVED="$(orca linear save-issue --team "$TEAM" --title "EPIC: $EPIC_TITLE" \
+                 --body-file "$EPIC_BODY" --json)" \
+    || { echo "save-issue failed for the epic — stopping. Nothing was created." >&2; exit 1; }
+  EPIC_ID="$(jq -r '.result.identifier // .identifier // empty' <<<"$EPIC_SAVED")"
+  [ -n "$EPIC_ID" ] \
+    || { echo "save-issue returned no identifier for the epic — stopping. Nothing was created." >&2; exit 1; }
 else
   EPIC_ID="DRY-EPIC"
 fi
