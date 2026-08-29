@@ -35,3 +35,20 @@ export function runnable(issues, stateNames) {
     })
   })
 }
+
+// CLI entry so the runner can ask "what may launch now?" from bash.
+// `bun src/schedule.js runnable <state.json> <done> <canceled> <inProgress>`
+// prints one id per line. State names are comma-separated.
+if (import.meta.main) {
+  const [cmd, path, done, canceled, inProgress] = process.argv.slice(2)
+  if (cmd !== "runnable" || !path) {
+    console.error("usage: bun src/schedule.js runnable <state.json> <done> <canceled> <inProgress>")
+    process.exit(2)
+  }
+  const issues = JSON.parse(await Bun.file(path).text())
+  const split = s => (s || "").split(",").map(x => x.trim()).filter(Boolean)
+  const ready = runnable(issues, {
+    done: split(done), canceled: split(canceled), inProgress: split(inProgress),
+  })
+  for (const issue of ready) console.log(issue.id)
+}

@@ -1,0 +1,5 @@
+[
+  {"id": "JON-2", "state": "Todo", "blockedBy": []},
+  {"id": "JON-3", "state": "Todo", "blockedBy": ["JON-2"]},
+  {"id": "JON-4", "state": "Done", "blockedBy": []}
+]
