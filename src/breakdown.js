@@ -2,6 +2,13 @@
 // `/gan decompose`. Pure: no I/O, no network. Unlike src/core.js this is a
 // normal ES module — it is never inlined into a Workflow script.
 
+// The only field markers the format defines. Anything else matching `**Word:**`
+// at the start of a line looks like a marker to the parser and therefore ENDS the
+// field above it. Recording those here so the validator can reject them is what
+// keeps that truncation from happening silently.
+const KNOWN_FIELDS = ["Estimate", "Depends on", "Description", "Acceptance criteria"]
+const KNOWN_FIELD_KEYS = KNOWN_FIELDS.map(n => n.toLowerCase())
+
 // A field runs until the NEXT **Field:** marker — never until "some line did not
 // match". LLM output wraps prose and puts sentences between a heading and its
 // bullets; both used to truncate silently.
@@ -13,6 +20,7 @@ function parseTask(block) {
     dependsOn: [],
     description: "",
     acceptanceCriteria: [],
+    unknownFields: [],
   }
 
   let field = null
@@ -36,6 +44,8 @@ function parseTask(block) {
         field = "description"
       } else if (name === "acceptance criteria") {
         field = "criteria"
+      } else if (!KNOWN_FIELD_KEYS.includes(name)) {
+        task.unknownFields.push(header[1].trim())
       }
       continue
     }
@@ -65,9 +75,17 @@ export function parseBreakdown(markdown) {
   const afterEpic = markdown.slice(epicMatch.index + epicMatch[0].length)
   const taskSplit = afterEpic.split(/^##\s+TASK:\s*/m)
 
+  // A `### TASK:` heading is not a task — the split above only sees `##`. Its
+  // content is neither a field marker nor a bullet, so it is absorbed into the
+  // PREVIOUS task's description and a whole unit of scope disappears. Collect
+  // them for the validator rather than letting that happen quietly.
+  const malformedTaskHeadings =
+    (afterEpic.match(/^#{3,}\s+TASK:.*$/gm) || []).map(h => h.trim())
+
   return {
     epic: { title: epicMatch[1].trim(), summary: taskSplit[0].trim() },
     tasks: taskSplit.slice(1).map(parseTask),
+    malformedTaskHeadings,
   }
 }
 
@@ -80,6 +98,13 @@ export function validateBreakdown(breakdown) {
 
   if (tasks.length === 0) errors.push("breakdown has no tasks")
 
+  for (const heading of breakdown.malformedTaskHeadings || []) {
+    errors.push(
+      `task heading at the wrong depth: "${heading}" — a task must be "## TASK: <title>". ` +
+      "A deeper heading is not split out as a task and is absorbed into the previous one."
+    )
+  }
+
   const titles = new Set()
   for (const t of tasks) {
     if (titles.has(t.title)) errors.push(`duplicate task title: "${t.title}"`)
@@ -91,6 +116,13 @@ export function validateBreakdown(breakdown) {
     }
     if (!t.acceptanceCriteria || t.acceptanceCriteria.length === 0) {
       errors.push(`task "${t.title}" has no acceptance criteria`)
+    }
+    for (const f of t.unknownFields || []) {
+      errors.push(
+        `task "${t.title}" has an unrecognised field marker "**${f}:**" — only ` +
+        KNOWN_FIELDS.map(n => `**${n}:**`).join(", ") +
+        " are allowed, and any other marker silently ends the field above it."
+      )
     }
   }
 

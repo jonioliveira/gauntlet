@@ -34,6 +34,16 @@ into N pipeline runs. The user approves the breakdown before anything is written
 `Depends on:` names other tasks by their exact `## TASK:` title, comma-separated, or the
 literal `none`. It is the only ordering signal — section order means nothing.
 
+**Those four `**Field:**` markers are the only ones allowed.** Any other line starting
+`**Word:**` — `**Note:**`, `**Why:**`, `**Context:**`, `**Risk:**` — ends the field above
+it, so the rest of that description would be dropped. Put the extra prose inside
+`**Description:**` instead. A breakdown containing any other marker is rejected before
+anything is published.
+
+**Tasks are `## TASK:`, at exactly two hashes.** A `### TASK:` heading is not split out
+as a task at all — it is absorbed into the previous task and the whole unit of scope
+disappears. That, too, is rejected before publishing.
+
 **Task titles must not contain commas.** `Depends on:` is comma-separated, so a comma in
 a title makes every reference to it ambiguous. Write "Add contact_name and contact_phone
 columns", never "Add contact_name, contact_phone columns". A breakdown that breaks this

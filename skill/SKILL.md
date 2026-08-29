@@ -69,7 +69,13 @@ The loop ends only when a full panel pass finds nothing new.
      because no critic can judge whether it is the right product to build.
    - `decompose`: do **not** publish yet. Show the user the breakdown and the issues
      that were raised, and ask for approval. On approval, run
-     `bin/publish-epic.sh <breakdown-path>` — never call `orca linear` by hand.
+     `<$HOME>/.claude/gan-bin/publish-epic.sh <breakdown-path>` — never call
+     `orca linear` by hand. Resolve `$HOME` with `echo $HOME` the same way step 5
+     does: this skill runs in the user's own repo, which has no `bin/` of its own,
+     so a relative `bin/publish-epic.sh` names nothing. If that path does not
+     exist, the user has not run `./install.sh`; tell them so and stop.
+     Publishing is idempotent — if it stops part-way, fix the cause and re-run the
+     same command. Everything already in `published.json` is skipped.
 
 ## Notes
 

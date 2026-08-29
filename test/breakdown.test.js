@@ -187,3 +187,59 @@ test("a comma in a task title is rejected — it would break dependency referenc
   expect(r.ok).toBe(false)
   expect(r.errors.join(" ").toLowerCase()).toContain("comma")
 })
+
+test("an unrecognised field marker is rejected, not silently swallowed", () => {
+  const md = `# EPIC: E
+
+s
+
+## TASK: t
+
+**Description:** We must migrate the table.
+**Note:** the old column stays.
+More description that matters.
+**Acceptance criteria:**
+- c
+`
+  const b = parseBreakdown(md)
+  expect(b.tasks[0].unknownFields).toEqual(["Note"])
+  const r = validateBreakdown(b)
+  expect(r.ok).toBe(false)
+  expect(r.errors.join(" ")).toContain("**Note:**")
+})
+
+test("the four canonical field markers are not flagged", () => {
+  const b = parseBreakdown(SAMPLE)
+  expect(b.tasks.every(t => t.unknownFields.length === 0)).toBe(true)
+  expect(validateBreakdown(b).ok).toBe(true)
+})
+
+test("a `### TASK:` heading is rejected rather than absorbed", () => {
+  const md = `# EPIC: E
+
+s
+
+## TASK: real
+
+**Description:** d
+**Acceptance criteria:**
+- c
+
+### TASK: vanished
+
+**Description:** d
+**Acceptance criteria:**
+- c
+`
+  const b = parseBreakdown(md)
+  // The proof it would have vanished: only one task was split out.
+  expect(b.tasks.map(t => t.title)).toEqual(["real"])
+  expect(b.malformedTaskHeadings).toEqual(["### TASK: vanished"])
+  const r = validateBreakdown(b)
+  expect(r.ok).toBe(false)
+  expect(r.errors.join(" ")).toContain("wrong depth")
+})
+
+test("a validator called on a hand-built breakdown tolerates the new fields", () => {
+  expect(validateBreakdown(bd(task("a"))).ok).toBe(true)
+})

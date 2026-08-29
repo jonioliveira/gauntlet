@@ -26,13 +26,35 @@ Symlinks `skill/` to `~/.claude/skills/gan` and the built engine to
     bin/run-epic.sh JON-<id> --dry-run  # see the plan
     bin/run-epic.sh JON-<id>            # run it
 
-Both scripts take `--dry-run`. `run-epic.sh` opens one herdr pane per task,
-named `gan-<TASK-ID>` — kill a pane to stop that task. Ctrl-C on the runner does
-not stop in-flight panes.
+`install.sh` links `bin/` to `~/.claude/gan-bin`, so the skill can reach these
+scripts from whichever repo it is running in.
+
+Both scripts take `--dry-run`. `run-epic.sh --dry-run` simulates the *whole*
+execution order — every wave, not just what is runnable right now — and prints
+the exact commands each task would run.
+
+`publish-epic.sh` is idempotent: if it stops part-way, fix the cause and re-run
+the same command. Anything already in `published.json` is skipped, and each write
+carries a stable `--write-id` so a lost response resolves rather than duplicates.
+
+`run-epic.sh` opens one herdr tab per task, named `gan-<TASK-ID>` — kill it to
+stop that task. Ctrl-C on the runner does not stop in-flight panes. A task that
+fails is not retried within the same run; run the script again to retry it.
 
 State names are per-team; resolve yours with `orca linear team states` and set
-`GAN_DONE_STATES`, `GAN_CANCELED_STATES`, `GAN_INPROGRESS_STATES` if they differ
-from the defaults (`Done`, `Canceled`, `In Progress`).
+them explicitly rather than trusting the defaults:
+
+| Variable | Default |
+|---|---|
+| `GAN_TODO_STATES` | `Todo` |
+| `GAN_INPROGRESS_STATES` | `In Progress` |
+| `GAN_DONE_STATES` | `Done` |
+| `GAN_CANCELED_STATES` | `Canceled` |
+
+Comparison is exact — case and whitespace matter. A wrong `GAN_TODO_STATES` means
+a failed task cannot be released back out of in-progress (the runner warns on
+stderr); a wrong `GAN_INPROGRESS_STATES` means every launched task still looks
+runnable.
 
 ## Develop
 
