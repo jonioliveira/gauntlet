@@ -45,3 +45,25 @@ test("a task blocked by an id not in the set is not runnable", () => {
 test("independent branches both run", () => {
   expect(ids(runnable([i("A", "Todo"), i("B", "Todo")], S)).sort()).toEqual(["A", "B"])
 })
+
+test("a missing inProgress key throws rather than silently allowing a relaunch", () => {
+  expect(() => runnable([i("A", "In Progress")], { done: ["Done"], canceled: [] }))
+    .toThrow(/inProgress/)
+})
+
+test("an EMPTY inProgress array throws — Array.isArray alone would not catch this", () => {
+  expect(() => runnable([i("A", "In Progress")], { done: ["Done"], canceled: [], inProgress: [] }))
+    .toThrow(/inProgress/)
+})
+
+test("a missing or empty done array throws rather than stalling the epic silently", () => {
+  expect(() => runnable([i("A", "Todo")], { canceled: [], inProgress: ["In Progress"] }))
+    .toThrow(/done/)
+  expect(() => runnable([i("A", "Todo")], { done: [], canceled: [], inProgress: ["In Progress"] }))
+    .toThrow(/done/)
+})
+
+test("an empty canceled array is accepted — a team may have no canceled state", () => {
+  expect(ids(runnable([i("A", "Todo")], { done: ["Done"], canceled: [], inProgress: ["In Progress"] })))
+    .toEqual(["A"])
+})

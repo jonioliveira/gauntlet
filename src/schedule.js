@@ -7,6 +7,19 @@
 //      original state, so its dependents stay blocked with no skip logic.
 
 export function runnable(issues, stateNames) {
+  // `new Set(undefined)` is an empty Set, not an error, and an empty set silently
+  // inverts this function's guarantees: an empty `inProgress` makes a running task
+  // look runnable again (duplicate pipeline), and an empty `done` means nothing ever
+  // unblocks (silent stall). Both are worse than a crash, so refuse them.
+  for (const key of ["done", "inProgress"]) {
+    if (!Array.isArray(stateNames[key]) || stateNames[key].length === 0) {
+      throw new Error(`runnable: stateNames.${key} must be a non-empty array of state names`)
+    }
+  }
+  if (!Array.isArray(stateNames.canceled)) {
+    throw new Error("runnable: stateNames.canceled must be an array")
+  }
+
   const done = new Set(stateNames.done)
   const canceled = new Set(stateNames.canceled)
   const inProgress = new Set(stateNames.inProgress)
