@@ -126,3 +126,33 @@ export function validateBreakdown(breakdown) {
 
   return { ok: true, errors: [], order }
 }
+
+// CLI entry so shell scripts can get a validated, ordered plan as JSON.
+// `bun src/breakdown.js plan <file>` → {epic, tasks:[{title,body,estimate}],
+// order:[title], edges:[{child,parent}]}. Exits 1 with errors on stderr.
+if (import.meta.main) {
+  const [cmd, path] = process.argv.slice(2)
+  if (cmd !== "plan" || !path) {
+    console.error("usage: bun src/breakdown.js plan <breakdown.md>")
+    process.exit(2)
+  }
+  const md = await Bun.file(path).text()
+  const breakdown = parseBreakdown(md)
+  const check = validateBreakdown(breakdown)
+  if (!check.ok) {
+    for (const e of check.errors) console.error(e)
+    process.exit(1)
+  }
+  const body = t => [
+    t.description,
+    "",
+    "## Acceptance criteria",
+    ...t.acceptanceCriteria.map(c => `- ${c}`),
+  ].join("\n")
+  console.log(JSON.stringify({
+    epic: breakdown.epic,
+    tasks: breakdown.tasks.map(t => ({ title: t.title, body: body(t), estimate: t.estimate })),
+    order: check.order,
+    edges: breakdown.tasks.flatMap(t => t.dependsOn.map(p => ({ child: t.title, parent: p }))),
+  }))
+}
