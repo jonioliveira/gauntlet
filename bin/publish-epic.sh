@@ -73,9 +73,13 @@ while IFS= read -r title; do
 
   echo "orca linear save-issue --team $TEAM --parent-id $EPIC_ID --title \"$title\" --body-file $BODY ${EST:+--estimate $EST} --json"
   if [ "$DRY" -eq 0 ]; then
-    put_task "$title" "$(orca linear save-issue --team "$TEAM" --parent-id "$EPIC_ID" \
-                        --title "$title" --body-file "$BODY" ${EST:+--estimate "$EST"} \
-                        --json | jq -r '.result.identifier // .identifier')"
+    SAVED="$(orca linear save-issue --team "$TEAM" --parent-id "$EPIC_ID" \
+              --title "$title" --body-file "$BODY" ${EST:+--estimate "$EST"} --json)" \
+      || { echo "save-issue failed for \"$title\" — stopping. Created so far: $MANIFEST" >&2; exit 1; }
+    NEW_ID="$(jq -r '.result.identifier // .identifier // empty' <<<"$SAVED")"
+    [ -n "$NEW_ID" ] \
+      || { echo "save-issue returned no identifier for \"$title\" — stopping. Created so far: $MANIFEST" >&2; exit 1; }
+    put_task "$title" "$NEW_ID"
     write_manifest
   else
     put_task "$title" "DRY-$(echo "$title" | tr -cd '[:alnum:]' | cut -c1-8)"

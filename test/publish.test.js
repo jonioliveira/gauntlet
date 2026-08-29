@@ -21,7 +21,7 @@ test("dry-run emits the exact orca calls in dependency order", async () => {
 
 test("dry-run writes nothing", async () => {
   await $`bash bin/publish-epic.sh ${FIXTURE} --dry-run --team JON`.quiet()
-  const manifest = Bun.file("docs/spec/epics/breakdown-ok/published.json")
+  const manifest = Bun.file("test/fixtures/published.json")
   expect(await manifest.exists()).toBe(false)
 })
 
