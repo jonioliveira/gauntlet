@@ -12,6 +12,7 @@ EPIC=""; DRY=0; MAXP=3
 DONE_STATES="${GAN_DONE_STATES:-Done}"
 CANCELED_STATES="${GAN_CANCELED_STATES:-Canceled}"
 INPROGRESS_STATES="${GAN_INPROGRESS_STATES:-In Progress}"
+TODO_STATES="${GAN_TODO_STATES:-Todo}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -33,7 +34,8 @@ elif [ -z "${GAN_FAKE_LINEAR:-}" ]; then
   matches=()
   for m in docs/spec/epics/*/published.json; do
     [ -f "$m" ] || continue
-    [ "$(jq -r '.epic' "$m")" = "$EPIC" ] && matches+=("$m")
+    epic_name="$(jq -r '.epic' "$m")"
+    [ "$epic_name" = "$EPIC" ] && matches+=("$m")
   done
   case "${#matches[@]}" in
     1) MANIFEST="${matches[0]}" ;;
@@ -65,7 +67,41 @@ fetch_state() {
     > "$STATE_FILE"
 }
 
+# One task's whole lifecycle, run in the background. It must never abort the
+# parent: a failure here releases the claim and returns non-zero, so the run
+# continues and the task becomes runnable again once someone fixes it.
+run_task() {
+  local TASK="$1" WT="" PR=""
+
+  if ! WT="$(orca worktree create --name "$TASK" --linear-issue "$TASK" \
+               --base-branch main --json | jq -r '.result.path // .path')" || [ -z "$WT" ]; then
+    echo "worktree create failed for $TASK — releasing claim" >&2
+    orca linear save-issue "$TASK" --state "${TODO_STATES%%,*}" --json >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  if ( cd "$WT" && herdr agent start "gan-$TASK" --kind claude \
+        && herdr agent prompt "gan-$TASK" "/run-sdlc $TASK" --wait --timeout 3600000 ); then
+    # Best-effort: the PR URL is only discoverable if builders opened one. Never
+    # let this step fail the task — the pipeline already succeeded.
+    PR="$(cd "$WT" && gh pr view --json url -q .url 2>/dev/null || true)"
+    if [ -n "$PR" ]; then
+      orca linear attach "$TASK" --url "$PR" --title "PR/MR link" --json >/dev/null 2>&1 || true
+    fi
+    orca linear save-issue "$TASK" --state "${DONE_STATES%%,*}" --json >/dev/null
+    orca worktree rm --worktree "$TASK" --json >/dev/null 2>&1 || true
+    echo "done: $TASK${PR:+ ($PR)}"
+    return 0
+  fi
+
+  # Keep the worktree for inspection. Release the claim so the task can be retried.
+  echo "pipeline failed for $TASK — worktree kept at $WT, claim released" >&2
+  orca linear save-issue "$TASK" --state "${TODO_STATES%%,*}" --json >/dev/null 2>&1 || true
+  return 1
+}
+
 launched=0
+failed=0
 while :; do
   fetch_state
   READY="$(bun "$REPO/src/schedule.js" runnable "$STATE_FILE" \
@@ -73,6 +109,7 @@ while :; do
   [ -n "$READY" ] || break
 
   n=0
+  PIDS=""
   while IFS= read -r TASK; do
     [ -n "$TASK" ] || continue
     [ "$n" -ge "$MAXP" ] && break
@@ -87,17 +124,16 @@ while :; do
 
     if [ "$DRY" -eq 0 ]; then
       orca linear save-issue "$TASK" --state "${INPROGRESS_STATES%%,*}" --json >/dev/null
-      # --linear-issue binds the worktree to the ticket, which is what makes
-      # `orca linear attach --current` and `save-issue --current` work inside it.
-      WT="$(orca worktree create --name "$TASK" --linear-issue "$TASK" \
-              --base-branch main --json | jq -r '.result.path // .path')"
-      ( cd "$WT" && herdr agent start "gan-$TASK" --kind claude \
-          && herdr agent prompt "gan-$TASK" "/run-sdlc $TASK" --wait --timeout 3600000 ) &
+      run_task "$TASK" &
+      PIDS="$PIDS $!"
     fi
   done <<< "$READY"
 
   if [ "$DRY" -eq 1 ]; then echo "(dry run — nothing was created)"; break; fi
-  wait
+  for pid in $PIDS; do
+    wait "$pid" || failed=$((failed + 1))
+  done
 done
 
-echo "launched: $launched"
+echo "launched: $launched, failed: $failed"
+[ "$failed" -eq 0 ]

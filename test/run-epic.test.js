@@ -19,6 +19,13 @@ test("dry-run respects --max-parallel", async () => {
   expect(launches.length).toBe(1)
 })
 
+test("dry-run launches every runnable task when max-parallel allows", async () => {
+  const out = await $`bash bin/run-epic.sh JON-1 --dry-run --max-parallel 3`
+    .env({ ...process.env, GAN_FAKE_LINEAR: FIX }).text()
+  const launches = out.split("\n").filter(l => l.includes("herdr agent start"))
+  expect(launches.length).toBe(2)
+})
+
 test("dry-run creates no worktree, pane, or Linear write", async () => {
   const out = await $`bash bin/run-epic.sh JON-1 --dry-run --max-parallel 3`
     .env({ ...process.env, GAN_FAKE_LINEAR: FIX }).text()
