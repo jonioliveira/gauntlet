@@ -37,6 +37,33 @@ buildable work is done by hand, one ticket at a time.
 Linear is reachable through the Orca CLI rather than an MCP. No tracker MCP is
 connected, and none is required.
 
+## Prerequisite: builders must be installed in each target repo
+
+**Added 2026-09-02, after the branch merged. This was missing from the original
+spec and neither whole-branch review caught it — a dependency living outside this
+repo is invisible to a diff.**
+
+`bin/run-epic.sh` sends `/run-sdlc <TASK-ID>` to an agent in a herdr pane. That
+skill comes from builders, and builders installs **per repository**, not globally:
+
+```bash
+cd <target-repo>
+cp -R ~/workspace/builders/bundles/generic/.agent/skills .agent/skills
+cp ~/workspace/builders/bundles/generic/AGENTS.template.md .
+# then fill in AGENTS.md — it carries the verify command, the ADR source,
+# and `gate-policy`, which decides whether an unattended run stops for a human
+```
+
+Without it the runner does everything right — claims the task, creates the
+worktree, opens the pane, sends the prompt — and the agent has no such skill. The
+failure is per-task and looks like a pipeline failure, not a setup error.
+
+`gate-policy` matters here specifically: the default `auto` gates only when the
+invocation asks, and the runner never asks, so an unconfigured repo runs
+unattended. Setting `gate-policy: always` in one repo's `AGENTS.md` makes every
+task in that repo stop for review — blast radius as a property of the repo being
+changed, which is the right place for it.
+
 ## Architecture
 
 ```

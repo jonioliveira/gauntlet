@@ -6,6 +6,25 @@ Claude Code's Workflow tool and herdr panes.
 A generator drafts, a rotating panel of critics attacks, the generator revises.
 The loop ends only when a full panel pass finds nothing new.
 
+## Prerequisites
+
+`orca` (Linear + worktrees), `herdr` (panes), `bun`, `jq`, and **bash 3.2+** —
+macOS's stock bash is fine and is what this is written against.
+
+**Per target repo:** `bin/run-epic.sh` sends `/run-sdlc` to an agent, and that
+skill comes from [builders](../builders), which installs per repository:
+
+```bash
+cd <target-repo>
+cp -R ~/workspace/builders/bundles/generic/.agent/skills .agent/skills
+cp ~/workspace/builders/bundles/generic/AGENTS.template.md .
+# fill in AGENTS.md: verify command, ADR source, and gate-policy
+```
+
+Skip this and the runner works perfectly right up to the point where the agent
+has no `/run-sdlc` skill — which surfaces as a per-task pipeline failure, not as
+a setup error.
+
 ## Install
 
     ./install.sh
