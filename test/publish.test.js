@@ -48,7 +48,7 @@ test("a dangling dependency is rejected before any orca call", async () => {
 // Stubs shadow `orca` on PATH so the real Linear is never touched. Identifiers
 // are handed out from a counter so the second run has something to skip.
 function stubDir() {
-  const dir = mkdtempSync(join(tmpdir(), "gan-pub-"))
+  const dir = mkdtempSync(join(tmpdir(), "gauntlet-pub-"))
   const log = join(dir, "calls.log")
   const counter = join(dir, "counter")
   writeFileSync(join(dir, "orca"), `#!/bin/sh
@@ -91,7 +91,7 @@ test("a re-run skips everything already in the manifest", async () => {
 test("the epic is in the manifest before the first task can fail", async () => {
   // save-issue succeeds once (the epic) and then fails, which is the partial
   // failure the spec's recovery path is written for.
-  const dir = mkdtempSync(join(tmpdir(), "gan-pub-"))
+  const dir = mkdtempSync(join(tmpdir(), "gauntlet-pub-"))
   const counter = join(dir, "counter")
   writeFileSync(join(dir, "orca"), `#!/bin/sh
 n=$(cat "${counter}" 2>/dev/null || echo 0)

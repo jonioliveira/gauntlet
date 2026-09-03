@@ -21,5 +21,5 @@ if (!template.includes(MARKER)) {
 }
 
 mkdirSync("dist", { recursive: true })
-writeFileSync("dist/gan-engine.js", template.replace(MARKER, core.trim()))
-console.log("built dist/gan-engine.js")
+writeFileSync("dist/gauntlet.js", template.replace(MARKER, core.trim()))
+console.log("built dist/gauntlet.js")

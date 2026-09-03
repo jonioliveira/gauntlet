@@ -1,5 +1,5 @@
 export const meta = {
-  name: 'gan-engine',
+  name: 'gauntlet',
   description: 'Adversarial generate-and-attack loop for research and product definition',
   phases: [
     { title: 'Preflight', detail: 'parallel context gathering' },
@@ -12,10 +12,10 @@ export const meta = {
 
 const cfg = args
 if (!cfg || !cfg.slug || !cfg.input) {
-  throw new Error('gan-engine: args must include { slug, input }')
+  throw new Error('gauntlet: args must include { slug, input }')
 }
 if (!cfg.generator || !Array.isArray(cfg.lenses) || cfg.lenses.length === 0) {
-  throw new Error('gan-engine: args must include a generator and at least one lens')
+  throw new Error('gauntlet: args must include a generator and at least one lens')
 }
 
 const DEFAULT_TERMINATION = {
@@ -85,8 +85,8 @@ function attackPrompt(lens, draft) {
 }
 
 function paneDriverPrompt(round, body) {
-  const name = 'gan-' + cfg.slug
-  const outFile = '/tmp/gan-' + cfg.slug + '-r' + round + '.md'
+  const name = 'gauntlet-' + cfg.slug
+  const outFile = '/tmp/gauntlet-' + cfg.slug + '-r' + round + '.md'
   return [
     'You are driving a Herdr pane that hosts a long-lived generator agent.',
     'Use Bash. Run `herdr --skill` first if you do not already know the verbs.',
@@ -219,7 +219,7 @@ async function generate(critiques, round, current) {
 
 phase('Generate')
 let draft = await generate(null, 0, null)
-if (!draft) throw new Error('gan-engine: the generator produced nothing on round 0')
+if (!draft) throw new Error('gauntlet: the generator produced nothing on round 0')
 
 const seen = new Set()
 const raised = new Map()      // id -> full issue object, everything ever raised
@@ -257,7 +257,7 @@ while (shouldContinue(
 
   if (!results.length) {
     throw new Error(
-      'gan-engine: all ' + active.length + ' critics failed or returned malformed'
+      'gauntlet: all ' + active.length + ' critics failed or returned malformed'
       + ' results in round ' + state.round
       + ' — aborting rather than counting a false dry round'
     )
@@ -290,7 +290,7 @@ while (shouldContinue(
     for (const i of fresh) seen.add(i.id)
     phase('Generate')
     const revised = await generate(fresh, state.round + 1, draft)
-    if (!revised) throw new Error('gan-engine: the generator died on round ' + (state.round + 1))
+    if (!revised) throw new Error('gauntlet: the generator died on round ' + (state.round + 1))
     draft = revised
   }
 

@@ -9,10 +9,10 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EPIC=""; DRY=0; MAXP=3
-DONE_STATES="${GAN_DONE_STATES:-Done}"
-CANCELED_STATES="${GAN_CANCELED_STATES:-Canceled}"
-INPROGRESS_STATES="${GAN_INPROGRESS_STATES:-In Progress}"
-TODO_STATES="${GAN_TODO_STATES:-Todo}"
+DONE_STATES="${GAUNTLET_DONE_STATES:-Done}"
+CANCELED_STATES="${GAUNTLET_CANCELED_STATES:-Canceled}"
+INPROGRESS_STATES="${GAUNTLET_INPROGRESS_STATES:-In Progress}"
+TODO_STATES="${GAUNTLET_TODO_STATES:-Todo}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -30,7 +30,7 @@ MANIFEST=""
 if [ -f "$EPIC" ]; then
   MANIFEST="$EPIC"
   EPIC="$(jq -r '.epic' "$MANIFEST")"
-elif [ -z "${GAN_FAKE_LINEAR:-}" ]; then
+elif [ -z "${GAUNTLET_FAKE_LINEAR:-}" ]; then
   matches=()
   for m in docs/spec/epics/*/published.json; do
     [ -f "$m" ] || continue
@@ -56,8 +56,8 @@ trap 'rm -f "$STATE_FILE" "$STATE_FILE.sim"' EXIT
 # runnable and the ENTIRE epic launches at once, graph ignored. A shape change
 # here has to be loud.
 fetch_state() {
-  if [ -n "${GAN_FAKE_LINEAR:-}" ]; then
-    cp "$GAN_FAKE_LINEAR" "$STATE_FILE"
+  if [ -n "${GAUNTLET_FAKE_LINEAR:-}" ]; then
+    cp "$GAUNTLET_FAKE_LINEAR" "$STATE_FILE"
     return
   fi
   [ -f "$MANIFEST" ] || { echo "no manifest at $MANIFEST — publish first" >&2; exit 1; }
@@ -80,11 +80,11 @@ note_failure() {
 }
 
 # Releasing the claim is what lets a FRESH runner retry the task. Getting
-# GAN_TODO_STATES wrong makes this write fail, and a swallowed failure leaves the
+# GAUNTLET_TODO_STATES wrong makes this write fail, and a swallowed failure leaves the
 # task in progress forever with nothing said — so say it.
 release_claim() {
   orca linear save-issue "$1" --state "${TODO_STATES%%,*}" --json >/dev/null 2>&1 \
-    || echo "$1: could not release the claim to \"${TODO_STATES%%,*}\" — is GAN_TODO_STATES right for this team? The task is stuck in progress and will not be retried." >&2
+    || echo "$1: could not release the claim to \"${TODO_STATES%%,*}\" — is GAUNTLET_TODO_STATES right for this team? The task is stuck in progress and will not be retried." >&2
 }
 
 # The exact sequence run_task performs, printed rather than run.
@@ -92,9 +92,9 @@ print_plan() {
   local TASK="$1"
   echo "orca linear save-issue $TASK --state \"${INPROGRESS_STATES%%,*}\""
   echo "orca worktree create --name $TASK --linear-issue $TASK --base-branch main --json"
-  echo "herdr tab create --cwd <worktree> --label gan-$TASK --no-focus"
-  echo "herdr agent start gan-$TASK --kind claude --pane <pane-id>"
-  echo "herdr agent prompt gan-$TASK \"/run-sdlc $TASK\" --wait --until idle --until done --until blocked"
+  echo "herdr tab create --cwd <worktree> --label gauntlet-$TASK --no-focus"
+  echo "herdr agent start gauntlet-$TASK --kind claude --pane <pane-id>"
+  echo "herdr agent prompt gauntlet-$TASK \"/run-sdlc $TASK\" --wait --until idle --until done --until blocked"
 }
 
 # One task's whole lifecycle, run in the background. It must never abort the
@@ -116,7 +116,7 @@ run_task() {
   # and a pane's working directory comes from `tab create --cwd`, never from the
   # cwd of the process that calls `agent start`. So the tab is what puts the
   # pipeline in this task's worktree.
-  TABJSON="$(herdr tab create --cwd "$WT" --label "gan-$TASK" --no-focus 2>/dev/null)" || TABJSON=""
+  TABJSON="$(herdr tab create --cwd "$WT" --label "gauntlet-$TASK" --no-focus 2>/dev/null)" || TABJSON=""
   PANE="$(printf '%s' "$TABJSON" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)" || PANE=""
   TAB="$(printf '%s' "$TABJSON" | jq -r '.result.tab.tab_id // empty' 2>/dev/null)" || TAB=""
   if [ -z "$PANE" ]; then
@@ -131,18 +131,18 @@ run_task() {
   # pipeline parked at a human gate (`gate-policy: always`) having built nothing,
   # and the default --wait would return 0 for it. The status is read back rather
   # than inferred from the exit code, which cannot distinguish them.
-  if herdr agent start "gan-$TASK" --kind claude --pane "$PANE" \
-     && herdr agent prompt "gan-$TASK" "/run-sdlc $TASK" \
+  if herdr agent start "gauntlet-$TASK" --kind claude --pane "$PANE" \
+     && herdr agent prompt "gauntlet-$TASK" "/run-sdlc $TASK" \
           --wait --until idle --until done --until blocked --timeout 3600000; then
-    STATUS="$(herdr agent get "gan-$TASK" 2>/dev/null | jq -r '.result.agent.agent_status // empty' 2>/dev/null)" || STATUS=""
+    STATUS="$(herdr agent get "gauntlet-$TASK" 2>/dev/null | jq -r '.result.agent.agent_status // empty' 2>/dev/null)" || STATUS=""
 
     if [ "$STATUS" = "blocked" ]; then
       # Stop for a human: nothing was built, so marking it done would be a lie,
       # and releasing the claim would relaunch it straight into the same gate.
       # Leave the claim, the pane and the worktree exactly where they are.
-      echo "$TASK: pipeline is BLOCKED at a human gate — answer it in herdr pane gan-$TASK" >&2
+      echo "$TASK: pipeline is BLOCKED at a human gate — answer it in herdr pane gauntlet-$TASK" >&2
       echo "  Worktree kept at $WT" >&2
-      note_failure "$TASK" "The pipeline is waiting at a human gate in herdr pane gan-$TASK (worktree $WT). Nothing was built yet. Answer the gate, then move this issue on by hand."
+      note_failure "$TASK" "The pipeline is waiting at a human gate in herdr pane gauntlet-$TASK (worktree $WT). Nothing was built yet. Answer the gate, then move this issue on by hand."
       return 1
     fi
 
@@ -159,7 +159,7 @@ run_task() {
       echo "$TASK: pipeline SUCCEEDED but marking it done failed." >&2
       echo "  The work is complete${PR:+ ($PR)} — do NOT re-run it." >&2
       echo "  Finish by hand: orca linear save-issue $TASK --state \"${DONE_STATES%%,*}\"" >&2
-      echo "  Worktree kept at $WT, pane gan-$TASK still open" >&2
+      echo "  Worktree kept at $WT, pane gauntlet-$TASK still open" >&2
       note_failure "$TASK" "Pipeline succeeded but the runner could not mark this issue done. The work is complete${PR:+ ($PR)} — do not re-run it; move it to done manually."
       return 1
     fi
@@ -260,7 +260,7 @@ while :; do
     print_plan "$TASK"
 
     if ! orca linear save-issue "$TASK" --state "${INPROGRESS_STATES%%,*}" --json >/dev/null; then
-      echo "$TASK: could not claim (state change failed) — is GAN_INPROGRESS_STATES right for this team?" >&2
+      echo "$TASK: could not claim (state change failed) — is GAUNTLET_INPROGRESS_STATES right for this team?" >&2
       failed=$((failed + 1)); mark_failed "$TASK"
       continue
     fi

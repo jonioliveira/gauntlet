@@ -1,6 +1,6 @@
 ---
-name: gan
-description: Run an adversarial generate-and-attack pipeline that hardens work against a rotating panel of critics. Use when the user types /gan research <question>, /gan define <idea>, or /gan decompose <research-doc>, or asks to research something rigorously, stress-test a draft, turn a rough product idea into a spec that has survived criticism, or break research findings into a Linear epic and tasks.
+name: gauntlet
+description: Run an adversarial generate-and-attack pipeline that hardens work against a rotating panel of critics. Use when the user types /gauntlet research <question>, /gauntlet define <idea>, or /gauntlet decompose <research-doc>, or asks to research something rigorously, stress-test a draft, turn a rough product idea into a spec that has survived criticism, or break research findings into a Linear epic and tasks.
 ---
 
 # GAN — adversarial research and product definition
@@ -10,9 +10,9 @@ The loop ends only when a full panel pass finds nothing new.
 
 ## Usage
 
-- `/gan research <question>` — evidence-backed findings, runs unattended
-- `/gan define <idea>` — a hardened spec, stops for the user's approval
-- `/gan decompose <research-doc>` — a Linear epic and its tasks, stops for your approval
+- `/gauntlet research <question>` — evidence-backed findings, runs unattended
+- `/gauntlet define <idea>` — a hardened spec, stops for the user's approval
+- `/gauntlet decompose <research-doc>` — a Linear epic and its tasks, stops for your approval
 
 ## What to do
 
@@ -34,7 +34,7 @@ The loop ends only when a full panel pass finds nothing new.
    If the current directory is not a git repo, ask where output should land.
 
 5. **Resolve the engine path.** Run `echo $HOME` with Bash and use
-   `<that value>/.claude/workflows/gan-engine.js` as the `scriptPath`.
+   `<that value>/.claude/workflows/gauntlet.js` as the `scriptPath`.
    `scriptPath` is a JSON string, not a shell word — nothing expands `~`, so it
    must be a fully-expanded absolute path. If that file does not exist, the user
    has not run `./install.sh` yet; tell them so and stop, rather than falling
@@ -69,7 +69,7 @@ The loop ends only when a full panel pass finds nothing new.
      because no critic can judge whether it is the right product to build.
    - `decompose`: do **not** publish yet. Show the user the breakdown and the issues
      that were raised, and ask for approval. On approval, run
-     `<$HOME>/.claude/gan-bin/publish-epic.sh <breakdown-path>` — never call
+     `<$HOME>/.claude/gauntlet-bin/publish-epic.sh <breakdown-path>` — never call
      `orca linear` by hand. Resolve `$HOME` with `echo $HOME` the same way step 5
      does: this skill runs in the user's own repo, which has no `bin/` of its own,
      so a relative `bin/publish-epic.sh` names nothing. If that path does not
@@ -79,9 +79,9 @@ The loop ends only when a full panel pass finds nothing new.
 
 ## Notes
 
-- The engine is rebuilt with `bun run build` in `~/workspace/gan-engine` after
+- The engine is rebuilt with `bun run build` in `~/workspace/gauntlet` after
   any change to `src/`. A stale `dist/` is the most likely cause of an edit
   appearing to have no effect.
 - Tune lenses by editing the config markdown. Never add domain branching to the
-  engine — if `gan-engine.js` ever needs to know which domain it is running,
+  engine — if `gauntlet.js` ever needs to know which domain it is running,
   the shared engine was the wrong call.

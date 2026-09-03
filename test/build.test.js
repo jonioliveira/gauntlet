@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test"
 import { readFileSync, existsSync, statSync } from "node:fs"
 
-const OUT = "dist/gan-engine.js"
+const OUT = "dist/gauntlet.js"
 const SOURCES = ["src/core.js", "src/engine.template.js", "build.js"]
 
 test("build output exists", () => {

@@ -1,5 +1,5 @@
 // Parses and validates the canonical breakdown format emitted by
-// `/gan decompose`. Pure: no I/O, no network. Unlike src/core.js this is a
+// `/gauntlet decompose`. Pure: no I/O, no network. Unlike src/core.js this is a
 // normal ES module — it is never inlined into a Workflow script.
 
 // The only field markers the format defines. Anything else matching `**Word:**`

@@ -7,7 +7,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BREAKDOWN=""; DRY=0; TEAM="${GAN_LINEAR_TEAM:-JON}"
+BREAKDOWN=""; DRY=0; TEAM="${GAUNTLET_LINEAR_TEAM:-JON}"
 
 while [ $# -gt 0 ]; do
   case "$1" in

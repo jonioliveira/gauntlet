@@ -1,6 +1,6 @@
 # Decompose config
 
-`input` is the path to a `/gan research` findings document. Output is one epic and
+`input` is the path to a `/gauntlet research` findings document. Output is one epic and
 its tasks, ready to publish to Linear.
 `checkpoint: before-final` — publishing creates real Linear issues and then fans out
 into N pipeline runs. The user approves the breakdown before anything is written.

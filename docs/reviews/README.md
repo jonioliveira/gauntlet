@@ -46,3 +46,34 @@ with `build output is not stale — run \`bun run build\``. Both invocations are
 | — | `--base-branch main` is hardcoded | Visible in the dry-run plan; change it for a repo whose default branch differs. |
 
 Plus eleven follow-up minors triaged in the final review.
+
+---
+
+## Renamed 2026-09-03: `gan-engine` → `gauntlet`
+
+The specs, plans and reviews in this directory refer to the project as
+`gan-engine`, `/gan`, and `GAN_*`. That was its name until 2026-09-03; those
+documents are records of decisions taken at the time and have deliberately not
+been rewritten.
+
+The name was dropped because it claimed a mechanism the system does not have.
+`docs/spec/2026-08-24-gan-engine.md` says so itself: *"In a real GAN the
+discriminator learns and sharpens. An LLM critic does not — it is static."* Lens
+diversity and K consecutive dry rounds exist precisely **as substitutes** for a
+discriminator that improves, so naming the thing after adversarial learning
+misdescribes it. The repo had also outgrown "engine": it is now the engine plus
+three domains, a Linear publisher, and a DAG runner.
+
+`gauntlet` is what the loop literally is — a draft runs a line of attackers,
+repeatedly, until one full pass leaves it untouched.
+
+| Then | Now |
+|---|---|
+| `gan-engine` (repo, package, workflow) | `gauntlet` |
+| `/gan research \| define \| decompose` | `/gauntlet …` |
+| `GAN_*_STATES`, `GAN_LINEAR_TEAM`, `GAN_FAKE_LINEAR` | `GAUNTLET_*` |
+| panes `gan-<TASK-ID>` | `gauntlet-<TASK-ID>` |
+| `~/.claude/skills/gan`, `workflows/gan-engine.js`, `gan-bin` | `skills/gauntlet`, `workflows/gauntlet.js`, `gauntlet-bin` |
+
+Nothing was installed and nothing had run when this happened, so there were no
+live symlinks, published epics, or pane names carrying the old prefix.
