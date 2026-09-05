@@ -87,5 +87,5 @@ scripts cannot import.
 Tune behaviour by editing `skill/configs/*.md`. Never add domain branching to
 the engine.
 
-- Design: [docs/spec/2026-08-24-gauntlet.md](docs/spec/2026-08-24-gauntlet.md)
-- Plan: [docs/plans/2026-08-24-gauntlet.md](docs/plans/2026-08-24-gauntlet.md)
+- Design: [docs/spec/2026-08-24-gan-engine.md](docs/spec/2026-08-24-gan-engine.md)
+- Plan: [docs/plans/2026-08-24-gan-engine.md](docs/plans/2026-08-24-gan-engine.md)
